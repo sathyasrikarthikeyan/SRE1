@@ -1,31 +1,25 @@
 import os
 
 from dotenv import load_dotenv
-
 from azure.identity import DefaultAzureCredential
-from azure.ai.projects import AIProjectClient
+from agent_framework.foundry import FoundryChatClient
+
+from app.agent.memory import memory_service
 
 load_dotenv()
 
-project_client = AIProjectClient(
-    endpoint=os.getenv("PROJECT_ENDPOINT"),
+client = FoundryChatClient(
+    project_endpoint=os.getenv("PROJECT_ENDPOINT"),
+    model=os.getenv("MODEL_NAME"),
     credential=DefaultAzureCredential()
 )
 
-client = project_client.get_openai_client(
-    api_version=os.getenv("OPENAI_API_VERSION")
-)
-
-
-def chat_with_agent(message: str) -> str:
-
-    response = client.chat.completions.create(
-        model=os.getenv("MODEL_NAME"),
-        messages=[
-            {
-                "role": "system",
-                "content": """
+agent = client.as_agent(
+    name="ServiceNowAgent",
+    instructions="""
 You are a ServiceNow Operational Agent.
+
+Remember previous messages from the conversation.
 
 Your responsibilities:
 - Incident Management
@@ -35,12 +29,41 @@ Your responsibilities:
 
 Provide concise, professional, and helpful responses.
 """
-            },
-            {
-                "role": "user",
-                "content": message
-            }
-        ]
+)
+
+
+async def chat_with_agent(message: str) -> str:
+
+    # Save user message
+    memory_service.save_message(
+        "user",
+        message
     )
 
-    return response.choices[0].message.content
+    # Build conversation history
+    context = ""
+
+    for item in memory_service.get_history():
+        context += f"{item['role']}: {item['content']}\n"
+
+    prompt = f"""
+Conversation History:
+
+{context}
+
+Current User Message:
+{message}
+"""
+
+    # Call agent
+    response = await agent.run(prompt)
+
+    answer = str(response)
+
+    # Save assistant response
+    memory_service.save_message(
+        "assistant",
+        answer
+    )
+
+    return answer
