@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+python-dotenv
+
+azure-ai-projects
+azure-identity
+openai
+
+semantic-kernel
