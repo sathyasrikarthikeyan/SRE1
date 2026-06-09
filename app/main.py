@@ -6,6 +6,7 @@ from pydantic import BaseModel
 
 from app.agent.chat_service import chat_with_agent
 from app.agent.chat_store import chat_store
+from app.agent.cosmos_service import save_chat
 
 app = FastAPI()
 
@@ -52,29 +53,50 @@ async def get_chat(chat_id: str):
 @app.post("/chat")
 async def chat(request: ChatRequest):
 
-    # Create chat if not exists
-    if request.chat_id not in chat_store.chats:
-        chat_store.create_chat(request.chat_id)
+    chats = chat_store.get_chats()
 
-    # First user message becomes title
-    if (
-        chat_store.chats[request.chat_id]["title"]
-        == "New Chat"
-    ):
-        chat_store.chats[request.chat_id]["title"] = (
-            request.message[:40]
+    # Create chat if it doesn't exist
+    if request.chat_id not in chats:
+
+        chat_store.create_chat(
+            request.chat_id,
+            title="New Chat"
         )
 
-    # Save user message
+        chats = chat_store.get_chats()
+
+    # First user message becomes chat title
+    if (
+        request.chat_id in chats
+        and chats[request.chat_id]["title"] == "New Chat"
+    ):
+
+        chat = chats[request.chat_id]
+
+        chat["title"] = request.message[:40]
+
+        save_chat(
+            request.chat_id,
+            chat["title"],
+            chat["messages"]
+        )
+
+    # Save current user message
     chat_store.add_message(
         request.chat_id,
         "user",
         request.message
     )
 
-    # Get AI response
+    # Reload latest history from Cosmos DB
+    history = chat_store.get_messages(
+        request.chat_id
+    )
+
+    # Ask agent with full chat history
     response = await chat_with_agent(
-        request.message
+        request.message,
+        history
     )
 
     # Save assistant response

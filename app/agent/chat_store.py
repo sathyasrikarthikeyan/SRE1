@@ -1,56 +1,66 @@
+from app.agent.cosmos_service import (
+    save_chat,
+    get_chat,
+    get_all_chats
+)
+
+
 class ChatStore:
-
-    def __init__(self):
-        self.chats = {}
-
-    def create_chat(self, chat_id, title="New Chat"):
-
-        self.chats[chat_id] = {
-            "title": title,
-            "messages": []
-        }
 
     def get_chats(self):
 
-        return self.chats
+        chats = {}
 
-    def get_chat(self, chat_id):
+        for item in get_all_chats():
 
-        if chat_id not in self.chats:
-            return None
+            chats[item["chat_id"]] = {
+                "title": item.get("title", "New Chat"),
+                "messages": item.get("messages", [])
+            }
 
-        return self.chats[chat_id]
+        return chats
+
+    def create_chat(self, chat_id, title="New Chat"):
+
+        save_chat(
+            chat_id,
+            title,
+            []
+        )
 
     def add_message(self, chat_id, role, content):
 
-        if chat_id not in self.chats:
-            self.create_chat(chat_id)
+        chat = get_chat(chat_id)
 
-        self.chats[chat_id]["messages"].append(
+        if not chat:
+
+            chat = {
+                "chat_id": chat_id,
+                "title": "New Chat",
+                "messages": []
+            }
+
+        chat["messages"].append(
             {
                 "role": role,
                 "content": content
             }
         )
 
+        save_chat(
+            chat_id,
+            chat["title"],
+            chat["messages"]
+        )
+
     def get_messages(self, chat_id):
 
-        if chat_id not in self.chats:
+        chat = get_chat(chat_id)
+
+        if not chat:
             return []
 
-        return self.chats[chat_id]["messages"]
-
-    def update_title(self, chat_id, title):
-
-        if chat_id not in self.chats:
-            return
-
-        self.chats[chat_id]["title"] = title
-
-    def delete_chat(self, chat_id):
-
-        if chat_id in self.chats:
-            del self.chats[chat_id]
+        return chat["messages"]
 
 
 chat_store = ChatStore()

@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 from azure.identity import DefaultAzureCredential
 from agent_framework.foundry import FoundryChatClient
 
-from app.agent.memory import memory_service
+from app.agent.cosmos_service import get_all_chats
 
 load_dotenv()
 
@@ -32,38 +32,62 @@ Provide concise, professional, and helpful responses.
 )
 
 
-async def chat_with_agent(message: str) -> str:
+async def chat_with_agent(
+    message: str,
+    history: list
+) -> str:
 
-    # Save user message
-    memory_service.save_message(
-        "user",
-        message
-    )
-
-    # Build conversation history
+    # Current Chat History
     context = ""
 
-    for item in memory_service.get_history():
-        context += f"{item['role']}: {item['content']}\n"
+    for item in history:
+        context += (
+            f"{item['role']}: "
+            f"{item['content']}\n"
+        )
+
+    # Cross-Chat Memory
+    all_chats = get_all_chats()[-5:]
+
+    global_memory = ""
+
+    for chat in all_chats:
+
+        messages = chat.get("messages", [])[-5:]
+
+        for msg in messages:
+
+            global_memory += (
+                f"{msg['role']}: "
+                f"{msg['content']}\n"
+            )
 
     prompt = f"""
-Conversation History:
+You are a ServiceNow Operational Agent.
+
+Known Information From Recent Chats:
+
+{global_memory}
+
+Current Chat History:
 
 {context}
 
 Current User Message:
+
 {message}
+
+Use:
+1. Recent chat memory
+2. Current chat history
+
+when answering.
 """
 
-    # Call agent
+    print("\n===== MEMORY SUMMARY =====")
+    print(f"Loaded {len(all_chats)} recent chats")
+    print("==========================\n")
+
     response = await agent.run(prompt)
 
-    answer = str(response)
-
-    # Save assistant response
-    memory_service.save_message(
-        "assistant",
-        answer
-    )
-
-    return answer
+    return str(response)
